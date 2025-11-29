@@ -90,7 +90,15 @@ export default function DocumentDetailScreen() {
   const metadata = document.metadata as any;
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <View style={styles.headerBar}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#2563eb" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Document Details</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+      <ScrollView style={styles.scrollContent}>
       {imageUrl && (
         <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="contain" />
       )}
@@ -163,11 +171,41 @@ export default function DocumentDetailScreen() {
         </View>
       </View>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    flex: 1,
+    textAlign: 'center',
+    marginRight: 40,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scrollContent: {
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
