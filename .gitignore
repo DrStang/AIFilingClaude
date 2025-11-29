@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.expo/
+.expo-shared/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+*.swp
+*.swo
+*~
+.tmp/

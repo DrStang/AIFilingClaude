@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "AI Filing Cabinet",
+    "slug": "ai-filing-cabinet",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.aifilingcabinet",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs camera access to scan documents.",
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to import documents.",
+        "NSFaceIDUsageDescription": "This app uses Face ID to secure your documents."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.aifilingcabinet",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AI Filing Cabinet to access your camera to scan documents."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow AI Filing Cabinet to use Face ID to secure your documents."
+        }
+      ]
+    ],
+    "scheme": "aifilingcabinet",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
