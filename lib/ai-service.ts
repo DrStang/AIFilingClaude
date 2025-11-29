@@ -3,6 +3,11 @@ import { DocumentType, DocumentMetadata } from './database.types';
 const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
+// Helper to check if API key is valid (not placeholder or empty)
+const isValidApiKey = (key: string | undefined): boolean => {
+  return !!key && key.length > 20 && !key.includes('your_') && key !== 'undefined';
+};
+
 export interface OCRResult {
   text: string
   confidence: number
@@ -20,12 +25,12 @@ export interface DocumentAnalysis {
  */
 export async function performOCR(imageBase64: string): Promise<OCRResult> {
   try {
-    if (ANTHROPIC_API_KEY) {
+    if (isValidApiKey(ANTHROPIC_API_KEY)) {
       return await performOCRWithClaude(imageBase64);
-    } else if (OPENAI_API_KEY) {
+    } else if (isValidApiKey(OPENAI_API_KEY)) {
       return await performOCRWithOpenAI(imageBase64);
     } else {
-      throw new Error('No AI API key configured. Please set EXPO_PUBLIC_ANTHROPIC_API_KEY or EXPO_PUBLIC_OPENAI_API_KEY');
+      throw new Error('No AI API key configured. Please set EXPO_PUBLIC_ANTHROPIC_API_KEY or EXPO_PUBLIC_OPENAI_API_KEY in your .env file');
     }
   } catch (error) {
     console.error('OCR error:', error);
@@ -130,12 +135,12 @@ export async function analyzeDocument(
   ocrText: string
 ): Promise<DocumentAnalysis> {
   try {
-    if (ANTHROPIC_API_KEY) {
+    if (isValidApiKey(ANTHROPIC_API_KEY)) {
       return await analyzeWithClaude(imageBase64, ocrText);
-    } else if (OPENAI_API_KEY) {
+    } else if (isValidApiKey(OPENAI_API_KEY)) {
       return await analyzeWithOpenAI(imageBase64, ocrText);
     } else {
-      throw new Error('No AI API key configured');
+      throw new Error('No AI API key configured. Please set EXPO_PUBLIC_ANTHROPIC_API_KEY or EXPO_PUBLIC_OPENAI_API_KEY in your .env file');
     }
   } catch (error) {
     console.error('Document analysis error:', error);
