@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -24,22 +24,5 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  return (
-    <Stack
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#2563eb',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
-    >
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="document/[id]" options={{ title: 'Document Details' }} />
-      <Stack.Screen name="camera" options={{ title: 'Scan Document' }} />
-    </Stack>
-  );
+  return <Slot />;
 }
