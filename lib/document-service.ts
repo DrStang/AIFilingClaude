@@ -274,6 +274,37 @@ export async function getDocument(documentId: string) {
 }
 
 /**
+ * Updates a document's editable fields
+ */
+export interface UpdateDocumentParams {
+  auto_generated_name?: string;
+  document_type?: DocumentType;
+  metadata?: DocumentMetadata;
+  ocr_text?: string;
+}
+
+export async function updateDocument(
+  documentId: string,
+  updates: UpdateDocumentParams
+) {
+  const { data, error } = await supabase
+    .from('documents')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', documentId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/**
  * Deletes a document
  */
 export async function deleteDocument(documentId: string) {
