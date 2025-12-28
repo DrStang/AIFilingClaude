@@ -33,11 +33,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="folders"
+        options={{
+          title: 'Folders',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="folder" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="search" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="sharing"
+        options={{
+          title: 'Sharing',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people" size={size} color={color} />
           ),
         }}
       />
