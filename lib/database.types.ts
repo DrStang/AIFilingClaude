@@ -23,6 +23,7 @@ export interface Database {
           thumbnail_url: string | null
           file_size: number
           mime_type: string
+          folder_id: string | null
           created_at: string
           updated_at: string
           scanned_at: string | null
@@ -40,6 +41,7 @@ export interface Database {
           thumbnail_url?: string | null
           file_size: number
           mime_type: string
+          folder_id?: string | null
           created_at?: string
           updated_at?: string
           scanned_at?: string | null
@@ -57,6 +59,7 @@ export interface Database {
           thumbnail_url?: string | null
           file_size?: number
           mime_type?: string
+          folder_id?: string | null
           created_at?: string
           updated_at?: string
           scanned_at?: string | null
@@ -135,12 +138,268 @@ export interface Database {
           updated_at?: string
         }
       }
+      folders: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          parent_id: string | null
+          color: string
+          icon: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          parent_id?: string | null
+          color?: string
+          icon?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          parent_id?: string | null
+          color?: string
+          icon?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      tags: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          color: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          color?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          color?: string
+          created_at?: string
+        }
+      }
+      document_tags: {
+        Row: {
+          document_id: string
+          tag_id: string
+          created_at: string
+        }
+        Insert: {
+          document_id: string
+          tag_id: string
+          created_at?: string
+        }
+        Update: {
+          document_id?: string
+          tag_id?: string
+          created_at?: string
+        }
+      }
+      family_groups: {
+        Row: {
+          id: string
+          name: string
+          owner_id: string
+          invite_code: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          owner_id: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          owner_id?: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      family_members: {
+        Row: {
+          id: string
+          family_group_id: string
+          user_id: string
+          role: 'owner' | 'admin' | 'member'
+          joined_at: string
+        }
+        Insert: {
+          id?: string
+          family_group_id: string
+          user_id: string
+          role?: 'owner' | 'admin' | 'member'
+          joined_at?: string
+        }
+        Update: {
+          id?: string
+          family_group_id?: string
+          user_id?: string
+          role?: 'owner' | 'admin' | 'member'
+          joined_at?: string
+        }
+      }
+      document_shares: {
+        Row: {
+          id: string
+          document_id: string
+          shared_by: string
+          shared_with: string | null
+          family_group_id: string | null
+          permission: 'view' | 'edit'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          document_id: string
+          shared_by: string
+          shared_with?: string | null
+          family_group_id?: string | null
+          permission?: 'view' | 'edit'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          document_id?: string
+          shared_by?: string
+          shared_with?: string | null
+          family_group_id?: string | null
+          permission?: 'view' | 'edit'
+          created_at?: string
+        }
+      }
+      folder_shares: {
+        Row: {
+          id: string
+          folder_id: string
+          shared_by: string
+          shared_with: string | null
+          family_group_id: string | null
+          permission: 'view' | 'edit'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          folder_id: string
+          shared_by: string
+          shared_with?: string | null
+          family_group_id?: string | null
+          permission?: 'view' | 'edit'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          folder_id?: string
+          shared_by?: string
+          shared_with?: string | null
+          family_group_id?: string | null
+          permission?: 'view' | 'edit'
+          created_at?: string
+        }
+      }
+      email_imports: {
+        Row: {
+          id: string
+          user_id: string
+          document_id: string | null
+          email_subject: string | null
+          email_from: string | null
+          email_date: string | null
+          attachment_name: string
+          import_source: 'manual' | 'imap' | 'webhook' | 'forward'
+          processed: boolean
+          error_message: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          document_id?: string | null
+          email_subject?: string | null
+          email_from?: string | null
+          email_date?: string | null
+          attachment_name: string
+          import_source?: 'manual' | 'imap' | 'webhook' | 'forward'
+          processed?: boolean
+          error_message?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          document_id?: string | null
+          email_subject?: string | null
+          email_from?: string | null
+          email_date?: string | null
+          attachment_name?: string
+          import_source?: 'manual' | 'imap' | 'webhook' | 'forward'
+          processed?: boolean
+          error_message?: string | null
+          created_at?: string
+        }
+      }
+      export_history: {
+        Row: {
+          id: string
+          user_id: string
+          export_type: 'pdf' | 'zip' | 'csv'
+          document_ids: string[]
+          file_name: string
+          file_size: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          export_type: 'pdf' | 'zip' | 'csv'
+          document_ids: string[]
+          file_name: string
+          file_size?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          export_type?: 'pdf' | 'zip' | 'csv'
+          document_ids?: string[]
+          file_name?: string
+          file_size?: number | null
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      user_can_edit_document: {
+        Args: { doc_id: string }
+        Returns: boolean
+      }
+      get_folder_path: {
+        Args: { folder_id: string }
+        Returns: Array<{ id: string; name: string; depth: number }>
+      }
     }
     Enums: {
       document_type: DocumentType
@@ -168,6 +427,57 @@ export type ReminderType =
   | 'car_maintenance'
   | 'contract_renewal'
   | 'custom'
+
+export type SharePermission = 'view' | 'edit'
+export type FamilyRole = 'owner' | 'admin' | 'member'
+export type ExportType = 'pdf' | 'zip' | 'csv'
+export type ImportSource = 'manual' | 'imap' | 'webhook' | 'forward'
+
+export interface Folder {
+  id: string
+  user_id: string
+  name: string
+  parent_id: string | null
+  color: string
+  icon: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Tag {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface FamilyGroup {
+  id: string
+  name: string
+  owner_id: string
+  invite_code: string
+  created_at: string
+  updated_at: string
+}
+
+export interface FamilyMember {
+  id: string
+  family_group_id: string
+  user_id: string
+  role: FamilyRole
+  joined_at: string
+}
+
+export interface DocumentShare {
+  id: string
+  document_id: string
+  shared_by: string
+  shared_with: string | null
+  family_group_id: string | null
+  permission: SharePermission
+  created_at: string
+}
 
 export interface DocumentMetadata {
   // Common fields

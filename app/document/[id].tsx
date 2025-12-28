@@ -13,12 +13,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  FlatList,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getDocument, deleteDocument, updateDocument, UpdateDocumentParams } from '@/lib/document-service';
+import { getUserTags, getDocumentTags, setDocumentTags, createTag, Tag, TAG_COLORS } from '@/lib/tag-service';
+import { getUserFolders, moveDocumentToFolder, Folder, FOLDER_COLORS } from '@/lib/folder-service';
+import { getUserFamilyGroups, shareDocument, getDocumentShares, unshareDocument } from '@/lib/sharing-service';
+import { exportSingleDocument, shareExportedFile } from '@/lib/export-service';
 import { supabase } from '@/lib/supabase';
 import { Database, DocumentType, DocumentMetadata } from '@/lib/database.types';
+import { useAuthStore } from '@/stores/auth-store';
 import { format } from 'date-fns';
 
 type Document = Database['public']['Tables']['documents']['Row'];
@@ -38,6 +44,7 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams();
+  const { user } = useAuthStore();
   const [document, setDocument] = useState<Document | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,9 +60,29 @@ export default function DocumentDetailScreen() {
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
 
-  useEffect(() => {
-    loadDocument();
-  }, [id]);
+  // V2 Features state
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [documentTags, setDocumentTags] = useState<Tag[]>([]);
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [selectedTagColor, setSelectedTagColor] = useState(TAG_COLORS[0]);
+
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+
+  const [familyGroups, setFamilyGroups] = useState<any[]>([]);
+  const [documentShares, setDocumentShares] = useState<any[]>([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDocument();
+      loadV2Data();
+    }, [id])
+  );
 
   const loadDocument = async () => {
     try {
@@ -64,7 +91,6 @@ export default function DocumentDetailScreen() {
       setEditedName(doc.auto_generated_name);
       setEditedType(doc.document_type);
 
-      // Convert metadata to editable string format
       const metadata = doc.metadata as DocumentMetadata;
       if (metadata) {
         const stringMetadata: Record<string, string> = {};
@@ -80,7 +106,6 @@ export default function DocumentDetailScreen() {
         setEditedMetadata(stringMetadata);
       }
 
-      // Get signed URL for the image
       const { data } = supabase.storage
         .from('documents')
         .getPublicUrl(doc.storage_path);
@@ -94,16 +119,36 @@ export default function DocumentDetailScreen() {
     }
   };
 
+  const loadV2Data = async () => {
+    if (!user) return;
+
+    try {
+      const [userTags, docTags, userFolders, groups, shares] = await Promise.all([
+        getUserTags(user.id),
+        getDocumentTags(id as string),
+        getUserFolders(user.id),
+        getUserFamilyGroups(user.id),
+        getDocumentShares(id as string),
+      ]);
+
+      setTags(userTags);
+      setDocumentTags(docTags);
+      setFolders(userFolders);
+      setFamilyGroups(groups);
+      setDocumentShares(shares);
+    } catch (error) {
+      console.error('Error loading V2 data:', error);
+    }
+  };
+
   const handleSave = async () => {
     if (!document) return;
 
     setSaving(true);
     try {
-      // Convert string metadata back to proper types
       const processedMetadata: DocumentMetadata = {};
       Object.entries(editedMetadata).forEach(([key, value]) => {
         if (value.trim()) {
-          // Try to parse JSON for arrays/objects
           if (value.startsWith('[') || value.startsWith('{')) {
             try {
               processedMetadata[key] = JSON.parse(value);
@@ -111,7 +156,6 @@ export default function DocumentDetailScreen() {
               processedMetadata[key] = value;
             }
           } else if (!isNaN(Number(value)) && value !== '') {
-            // Convert to number if it looks like one
             processedMetadata[key] = Number(value);
           } else {
             processedMetadata[key] = value;
@@ -239,6 +283,97 @@ export default function DocumentDetailScreen() {
     return key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
+  // Tag handlers
+  const handleToggleTag = async (tag: Tag) => {
+    const isSelected = documentTags.some(t => t.id === tag.id);
+    const newTags = isSelected
+      ? documentTags.filter(t => t.id !== tag.id)
+      : [...documentTags, tag];
+
+    try {
+      await setDocumentTags(id as string, newTags.map(t => t.id));
+      setDocumentTags(newTags);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update tags');
+    }
+  };
+
+  const handleCreateTag = async () => {
+    if (!user || !newTagName.trim()) return;
+
+    try {
+      const tag = await createTag({
+        userId: user.id,
+        name: newTagName.trim(),
+        color: selectedTagColor,
+      });
+      setTags(prev => [...prev, tag]);
+      setNewTagName('');
+      await handleToggleTag(tag);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create tag');
+    }
+  };
+
+  // Folder handlers
+  const handleMoveToFolder = async (folderId: string | null) => {
+    try {
+      await moveDocumentToFolder(id as string, folderId);
+      setShowFolderPicker(false);
+      loadDocument();
+      Alert.alert('Success', 'Document moved successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to move document');
+    }
+  };
+
+  // Share handlers
+  const handleShareWithGroup = async (groupId: string) => {
+    if (!user) return;
+
+    try {
+      await shareDocument({
+        documentId: id as string,
+        sharedBy: user.id,
+        familyGroupId: groupId,
+        permission: 'view',
+      });
+      loadV2Data();
+      Alert.alert('Success', 'Document shared with group');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to share document');
+    }
+  };
+
+  const handleRemoveShare = async (shareId: string) => {
+    try {
+      await unshareDocument(shareId);
+      loadV2Data();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to remove share');
+    }
+  };
+
+  // Export handlers
+  const handleExport = async (format: 'pdf' | 'csv' | 'zip') => {
+    if (!user) return;
+
+    setExporting(true);
+    try {
+      const result = await exportSingleDocument(user.id, id as string, format);
+      if (result.success && result.filePath) {
+        setShowExportModal(false);
+        await shareExportedFile(result.filePath);
+      } else {
+        Alert.alert('Error', result.error || 'Export failed');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -256,6 +391,7 @@ export default function DocumentDetailScreen() {
   }
 
   const metadata = document.metadata as DocumentMetadata;
+  const currentFolder = folders.find(f => f.id === document.folder_id);
 
   return (
     <View style={styles.container}>
@@ -310,6 +446,60 @@ export default function DocumentDetailScreen() {
           )}
 
           <View style={styles.content}>
+            {/* Quick Actions */}
+            {!isEditing && (
+              <View style={styles.quickActions}>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => setShowFolderPicker(true)}
+                >
+                  <Ionicons name="folder-outline" size={22} color="#2563eb" />
+                  <Text style={styles.quickActionText}>Move</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => setShowTagPicker(true)}
+                >
+                  <Ionicons name="pricetag-outline" size={22} color="#2563eb" />
+                  <Text style={styles.quickActionText}>Tags</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => setShowShareModal(true)}
+                >
+                  <Ionicons name="share-social-outline" size={22} color="#2563eb" />
+                  <Text style={styles.quickActionText}>Share</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => setShowExportModal(true)}
+                >
+                  <Ionicons name="download-outline" size={22} color="#2563eb" />
+                  <Text style={styles.quickActionText}>Export</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Folder Location */}
+            {currentFolder && (
+              <View style={styles.locationBadge}>
+                <Ionicons name="folder" size={16} color={currentFolder.color} />
+                <Text style={styles.locationText}>{currentFolder.name}</Text>
+              </View>
+            )}
+
+            {/* Tags Display */}
+            {documentTags.length > 0 && (
+              <View style={styles.tagsContainer}>
+                {documentTags.map(tag => (
+                  <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color + '20' }]}>
+                    <View style={[styles.tagDot, { backgroundColor: tag.color }]} />
+                    <Text style={[styles.tagText, { color: tag.color }]}>{tag.name}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Document Header / Name */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Document Name</Text>
@@ -390,11 +580,7 @@ export default function DocumentDetailScreen() {
               ) : (
                 metadata && Object.keys(metadata).length > 0 ? (
                   Object.entries(metadata).map(([key, value]) => {
-                    if (
-                      !value ||
-                      key === 'tags' ||
-                      (Array.isArray(value) && value.length === 0)
-                    )
+                    if (!value || key === 'tags' || (Array.isArray(value) && value.length === 0))
                       return null;
 
                     return (
@@ -413,6 +599,24 @@ export default function DocumentDetailScreen() {
                 )
               )}
             </View>
+
+            {/* Sharing Status */}
+            {documentShares.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Shared With</Text>
+                {documentShares.map(share => (
+                  <View key={share.id} style={styles.shareRow}>
+                    <Ionicons name="people" size={18} color="#6b7280" />
+                    <Text style={styles.shareText}>
+                      {familyGroups.find(g => g.id === share.family_group_id)?.name || 'Shared'}
+                    </Text>
+                    <TouchableOpacity onPress={() => handleRemoveShare(share.id)}>
+                      <Ionicons name="close-circle" size={18} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Extracted Text (OCR) */}
             {document.ocr_text && (
@@ -504,6 +708,230 @@ export default function DocumentDetailScreen() {
             </ScrollView>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Tag Picker Modal */}
+      <Modal
+        visible={showTagPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTagPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Manage Tags</Text>
+              <TouchableOpacity onPress={() => setShowTagPicker(false)}>
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.createTagSection}>
+              <TextInput
+                style={styles.tagInput}
+                placeholder="New tag name"
+                value={newTagName}
+                onChangeText={setNewTagName}
+              />
+              <View style={styles.tagColorRow}>
+                {TAG_COLORS.slice(0, 6).map(color => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.tagColorOption,
+                      { backgroundColor: color },
+                      selectedTagColor === color && styles.tagColorSelected,
+                    ]}
+                    onPress={() => setSelectedTagColor(color)}
+                  />
+                ))}
+              </View>
+              <TouchableOpacity
+                style={[styles.createTagButton, !newTagName.trim() && styles.createTagButtonDisabled]}
+                onPress={handleCreateTag}
+                disabled={!newTagName.trim()}
+              >
+                <Text style={styles.createTagButtonText}>Create & Add Tag</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.pickerList}>
+              {tags.map(tag => {
+                const isSelected = documentTags.some(t => t.id === tag.id);
+                return (
+                  <TouchableOpacity
+                    key={tag.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => handleToggleTag(tag)}
+                  >
+                    <View style={styles.tagOption}>
+                      <View style={[styles.tagDot, { backgroundColor: tag.color }]} />
+                      <Text style={styles.pickerItemText}>{tag.name}</Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark" size={20} color="#2563eb" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Folder Picker Modal */}
+      <Modal
+        visible={showFolderPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFolderPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Move to Folder</Text>
+              <TouchableOpacity onPress={() => setShowFolderPicker(false)}>
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !document.folder_id && styles.pickerItemSelected]}
+                onPress={() => handleMoveToFolder(null)}
+              >
+                <View style={styles.folderOption}>
+                  <Ionicons name="home" size={20} color="#6b7280" />
+                  <Text style={styles.pickerItemText}>Root (No Folder)</Text>
+                </View>
+                {!document.folder_id && <Ionicons name="checkmark" size={20} color="#2563eb" />}
+              </TouchableOpacity>
+              {folders.map(folder => (
+                <TouchableOpacity
+                  key={folder.id}
+                  style={[
+                    styles.pickerItem,
+                    document.folder_id === folder.id && styles.pickerItemSelected,
+                  ]}
+                  onPress={() => handleMoveToFolder(folder.id)}
+                >
+                  <View style={styles.folderOption}>
+                    <Ionicons name="folder" size={20} color={folder.color} />
+                    <Text style={styles.pickerItemText}>{folder.name}</Text>
+                  </View>
+                  {document.folder_id === folder.id && (
+                    <Ionicons name="checkmark" size={20} color="#2563eb" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Share Document</Text>
+              <TouchableOpacity onPress={() => setShowShareModal(false)}>
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              {familyGroups.length === 0 ? (
+                <View style={styles.emptyShareContainer}>
+                  <Ionicons name="people-outline" size={48} color="#9ca3af" />
+                  <Text style={styles.emptyShareText}>No family groups yet</Text>
+                  <Text style={styles.emptyShareSubtext}>
+                    Create a family group in the Sharing tab to share documents
+                  </Text>
+                </View>
+              ) : (
+                familyGroups.map(group => {
+                  const isShared = documentShares.some(s => s.family_group_id === group.id);
+                  return (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[styles.pickerItem, isShared && styles.pickerItemSelected]}
+                      onPress={() => !isShared && handleShareWithGroup(group.id)}
+                      disabled={isShared}
+                    >
+                      <View style={styles.folderOption}>
+                        <Ionicons name="people" size={20} color="#2563eb" />
+                        <Text style={styles.pickerItemText}>{group.name}</Text>
+                      </View>
+                      {isShared && <Ionicons name="checkmark" size={20} color="#22c55e" />}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal
+        visible={showExportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Export Document</Text>
+              <TouchableOpacity onPress={() => setShowExportModal(false)}>
+                <Ionicons name="close" size={24} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.exportOptions}>
+              {exporting ? (
+                <View style={styles.exportingContainer}>
+                  <ActivityIndicator size="large" color="#2563eb" />
+                  <Text style={styles.exportingText}>Preparing export...</Text>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.exportOption}
+                    onPress={() => handleExport('pdf')}
+                  >
+                    <Ionicons name="document-text" size={32} color="#ef4444" />
+                    <Text style={styles.exportOptionTitle}>PDF Report</Text>
+                    <Text style={styles.exportOptionDesc}>
+                      Document with image and metadata
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.exportOption}
+                    onPress={() => handleExport('csv')}
+                  >
+                    <Ionicons name="grid" size={32} color="#22c55e" />
+                    <Text style={styles.exportOptionTitle}>CSV Data</Text>
+                    <Text style={styles.exportOptionDesc}>
+                      Spreadsheet-compatible format
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.exportOption}
+                    onPress={() => handleExport('zip')}
+                  >
+                    <Ionicons name="archive" size={32} color="#3b82f6" />
+                    <Text style={styles.exportOptionTitle}>ZIP Archive</Text>
+                    <Text style={styles.exportOptionDesc}>
+                      Image and metadata files
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Full Screen Image Viewer Modal */}
@@ -627,6 +1055,61 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  quickActions: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    justifyContent: 'space-around',
+  },
+  quickAction: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  quickActionText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#4b5563',
+    fontWeight: '500',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  tagDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  tagText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
   section: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -728,6 +1211,19 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontStyle: 'italic',
   },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  shareText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#4b5563',
+  },
   ocrTextContainer: {
     backgroundColor: '#f9fafb',
     borderRadius: 8,
@@ -769,7 +1265,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Picker Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -779,7 +1274,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '60%',
+    maxHeight: '70%',
   },
   pickerHeader: {
     flexDirection: 'row',
@@ -817,7 +1312,104 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '600',
   },
-  // Image Viewer Modal Styles
+  createTagSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tagInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  tagColorRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  tagColorOption: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  tagColorSelected: {
+    borderWidth: 3,
+    borderColor: '#1f2937',
+  },
+  createTagButton: {
+    backgroundColor: '#2563eb',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  createTagButtonDisabled: {
+    backgroundColor: '#93c5fd',
+  },
+  createTagButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tagOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  folderOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  emptyShareContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyShareText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4b5563',
+    marginTop: 12,
+  },
+  emptyShareSubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 20,
+  },
+  exportOptions: {
+    padding: 20,
+    gap: 16,
+  },
+  exportOption: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  exportOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginTop: 8,
+  },
+  exportOptionDesc: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  exportingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  exportingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+  },
   imageViewerContainer: {
     flex: 1,
     backgroundColor: '#000',
