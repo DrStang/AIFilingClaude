@@ -63,26 +63,40 @@ export async function createFamilyGroup(
 export async function getUserFamilyGroups(
   userId: string
 ): Promise<FamilyGroupWithMembers[]> {
-  const { data, error } = await supabase
-    .from('family_groups')
-    .select(
-      `
-      *,
-      family_members(
-        *
-      )
-    `
-    )
-    .or(`owner_id.eq.${userId},family_members.user_id.eq.${userId}`);
+  // First get user's own membership records (simplified RLS only allows this)
+  const { data: memberships, error: memberError } = await supabase
+    .from('family_members')
+    .select('family_group_id, role')
+    .eq('user_id', userId);
 
-  if (error) {
-    throw error;
+  if (memberError) {
+    throw memberError;
   }
 
-  return data.map((group: any) => ({
-    ...group,
-    members: group.family_members || [],
-  }));
+  const groupIds = memberships?.map((m: any) => m.family_group_id) || [];
+
+  if (groupIds.length === 0) {
+    return [];
+  }
+
+  // Get groups the user is a member of
+  const { data: groups, error: groupError } = await supabase
+    .from('family_groups')
+    .select('*')
+    .in('id', groupIds);
+
+  if (groupError) {
+    throw groupError;
+  }
+
+  // Map membership info to groups
+  return (groups || []).map((group: any) => {
+    const membership = memberships?.find((m: any) => m.family_group_id === group.id);
+    return {
+      ...group,
+      members: membership ? [membership] : [],
+    };
+  });
 }
 
 /**
